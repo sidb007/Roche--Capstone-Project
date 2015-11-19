@@ -12,7 +12,7 @@ norm.wine.data<-data.frame(apply(wine.data[,-ncol(wine.data)],MARGIN = 2,norm.fn
 wine.data<-cbind(norm.wine.data,type=wine.data$type)
 
 # Cross Validation 10 fold, k=10
-k<-10
+k<-1
 
 # ID defines each subset among k 
 wine.data$id <- sample(1:k, nrow(wine.data), replace = TRUE)
@@ -24,7 +24,7 @@ total<-data.frame(matrix(0,nrow=0,ncol=2))
 # Function for building Neural Network
 neural.net<-function(train){
   # maxit is the number of iterations for training neural networks
-  model<-nnet(as.factor(train$type)~.,data=train,size = 3,maxit=10000,trace=F)
+  model<-nnet(as.factor(train$type)~.,data=train,size = 3,maxit=10000,trace=T)
   model
 }
 #################
@@ -48,7 +48,7 @@ rm('script','raw.fun')
 
 #################
 
-par(mar=numeric(4),mfrow=c(1,2),family='serif')
+par(mar=numeric(4),mfrow=c(1,1),family='serif')
 
 # Loop for 10 fold cross validation
 for(i in 1:k){

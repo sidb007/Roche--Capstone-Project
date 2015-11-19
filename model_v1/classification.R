@@ -2,6 +2,7 @@ library("plyr")
 library("car")
 library(MASS)
 library(ROCR)
+library(e1071)
 
 setwd("~/Capstone/data/shared folder")
 
@@ -108,9 +109,9 @@ data.model<-agg.with.dep[,-c(1,7,8)]
 
 #data.model$status.bin<-as.numeric(levels(data.model$status.bin))[data.model$status.bin]
   
-
+z
 # Cross Validation 10 fold, k=10
-k<-5
+k<-2
 
 # ID defines each subset among k 
 data.model$id <- sample(1:k, nrow(data.model), replace = TRUE)
@@ -132,36 +133,109 @@ for(i in 1:k){
    
   #step <- stepAIC(glm.model, direction="both")
 #   step$anova
-  glm.model<-glm(formula=status.bin ~ count + inv.mean + inv.std.dev + participants.mean + 
-                   distinct.cc + Department.D._ + Department.I._ + Department.J._ + 
-                   Department.N._ + Department.S._ + Department.U._ + 
-                   Department.V._ + Department.W._ + Department.X._ + 
-                   Department.Y._ + Department.B._,family=binomial(logit),data=train)
+  my.formula<-as.formula("status.bin ~ count + inv.mean + inv.std.dev + participants.mean +
+    distinct.cc + Department.D._ + Department.I._ + Department.J._ +     Department.N._ + Department.S._ + Department.U._ + 
+    Department.V._ + Department.W._ + Department.X._ + 
+    Department.Y._ + Department.B._ ")
   
-  # Using built model for prediction
-  test$pred<-predict(glm.model, newdata=test, type="response")
+  glm.model<-glm(formula=my.formula,family=binomial(logit),data=train)
   
-  test<-test[-which(is.na(test$pred)),]
+  nb.model<-naiveBayes(formula=my.formula,data=train)
+  
+  train$status.bin<-as.factor(train$status.bin)
+  
+  svm.formula<-as.formula("status.bin ~ count + inv.mean + inv.std.dev +
+                          participants.mean + distinct.cc + Department.D._ +  
+                          Department.V._ + Department.H._ + Department.Y._ + 
+                          Department.R._ + Department.X._")
+  
+  svm.model<-svm(formula=svm.formula,data=train,probability=T,kernal="radial basis")
+  
+  nn.model<-nnet(formula=my.formula,data=train,size = 10,maxit=10000,trace=T)
+  
+  # Predict
+  test<- test[complete.cases(test),]
+  test$pred.glm<-predict(glm.model, newdata=test, type="response")
+  test$pred.nb<-predict(nb.model,newdata = test[,-ncol(test)],type="raw")[,2]
+  temp<-predict(svm.model,test,probability =T)
+  test$pred.svm<-attributes(temp)$probabilities[,2]
+  test$pred.nn<-predict(nn.model,newdata=test,type = "raw")
   
   
-   my.pred<-prediction(test$pred,test$status.bin)
-   perf <- performance(my.pred, measure = "tpr", x.measure = "fpr")
+  # Naive Bayes
+  my.pred.nb<-prediction(test$pred.nb,test$status.bin)
+  perf.nb <- performance(my.pred.nb, measure = "tpr", x.measure = "fpr")
+  #plot(perf.nb)
+  
+  #test<-test[-which(is.na(test$pred)),]
+  
+  # GLM
+  my.pred.glm<-prediction(test$pred.glm,test$status.bin)
+  perf.glm <- performance(my.pred.glm, measure = "tpr", x.measure = "fpr")
 
-#  plot(perf, col=rainbow(10))
+  #plot(perf.glm)
 
+  # SVM
+  
+  my.pred.svm<-prediction(test$pred.svm,test$status.bin)
+  perf.svm <- performance(my.pred.svm, measure = "tpr", x.measure = "fpr")
+  
+  # nn
+  
+  my.pred.nn<-prediction(test$pred.nn,test$status.bin)
+  perf.nn <- performance(my.pred.nn, measure = "tpr", x.measure = "fpr")
+  
+  
+  plot(perf.nb, type="l", col="red" )
+  par(new=TRUE)
+  plot(perf.glm, type="l", col="green" )
+  par(new=TRUE)
+  plot(perf.svm, type="l", col="blue" )
+  par(new=TRUE)
+  plot(perf.nn, type="l", col="yellow" )
+  abline(a=0,b=1)
+  legend('bottomright', c("NB","GLM","SVM","NN") , lty=1, col=c('red', 'green','blue',"yellow"), bty='n', cex=.75)  
+  
+  
   # AUC
-  auc.perf = performance(my.pred, measure = "auc")
+  auc.perf.nb = performance(my.pred.nb, measure = "auc")
+  auc.perf.glm = performance(my.pred.glm, measure = "auc")
+  auc.perf.nn = performance(my.pred.nn, measure = "auc")
   
   
+   # Accuracy Plot NB
+    acc.perf.nb = performance(my.pred.nb, measure = "acc",x.measure="cutoff")
+    #plot(acc.perf.nb)
   
-#   # Accuracy Plot
-#    acc.perf = performance(my.pred, measure = "acc",x.measure="cutoff")
-#    plot(acc.perf)
-  
-   # TPR VS Cutoff
-#    acc.tpr.cut = performance(my.pred, measure = "tpr",x.measure="cutoff")
-#    plot(acc.tpr.cut)
-#    abline(h= .8,v=.02)
+    # Accuracy Plot GLM
+    acc.perf.glm = performance(my.pred.glm, measure = "acc",x.measure="cutoff")
+    # plot(acc.perf.glm)
+    
+    # Accuracy Plot NN
+    acc.perf.nn = performance(my.pred.nn, measure = "acc",x.measure="cutoff")
+
+    plot(acc.perf.nb, type="l", col="red" )
+    par(new=TRUE)
+    plot(acc.perf.glm, type="l", col="green" )
+    par(new=TRUE)
+    plot(acc.perf.nn, type="l", col="yellow" )
+    
+    legend('bottomright', c("NB","GLM","NN") , lty=1, col=c('red', 'green','yellow'), bty='n', cex=.75)  
+    
+    
+    # TPR VS Cutoff
+    acc.tpr.cut.nb = performance(my.pred.nb, measure = "tpr",x.measure="cutoff")
+    acc.tpr.cut.glm = performance(my.pred.glm, measure = "tpr",x.measure="cutoff")
+    acc.tpr.cut.nn = performance(my.pred.nn, measure = "tpr",x.measure="cutoff")
+    
+    plot(acc.tpr.cut.nb, type="l", col="red" )
+    par(new=TRUE)
+    plot(acc.tpr.cut.glm, type="l", col="green" )
+    par(new=TRUE)
+    plot(acc.tpr.cut.nn, type="l", col="yellow" )
+    legend('topright', c("NB","GLM","NN") , lty=1, col=c('red', 'green',"yellow"), bty='n', cex=.75)  
+    #plot(acc.tpr.cut.glm)
+    abline(h= .8,v=.02)
    
   # Cut-Off
   cutoff<-.02
@@ -183,4 +257,6 @@ for(i in 1:k){
 }
 
 total
+
+
 
